@@ -1,4 +1,5 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Load a checkpoint file of pretrained transformer to a model in pytorch """
 
@@ -24,7 +25,7 @@ def load_param(checkpoint_file, conversion_table):
         assert pyt_param.size() == tf_param.shape, \
             'Dim Mismatch: %s vs %s ; %s' % \
                 (tuple(pyt_param.size()), tf_param.shape, tf_param_name)
-        
+
         # assign pytorch tensor from tensorflow param
         pyt_param.data = torch.from_numpy(tf_param)
 
@@ -38,8 +39,8 @@ def load_model(model, checkpoint_file):
         e.tok_embed.weight: p+"word_embeddings",
         e.pos_embed.weight: p+"position_embeddings",
         e.seg_embed.weight: p+"token_type_embeddings",
-        e.norm.gamma:       p+"LayerNorm/gamma",
-        e.norm.beta:        p+"LayerNorm/beta"
+        e.norm.weight:      p+"LayerNorm/gamma",
+        e.norm.bias:        p+"LayerNorm/beta"
     })
 
     # Transformer blocks
@@ -58,9 +59,9 @@ def load_model(model, checkpoint_file):
             b.pwff.fc1.bias:        p+"intermediate/dense/bias",
             b.pwff.fc2.weight:      p+"output/dense/kernel",
             b.pwff.fc2.bias:        p+"output/dense/bias",
-            b.norm1.gamma:          p+"attention/output/LayerNorm/gamma",
-            b.norm1.beta:           p+"attention/output/LayerNorm/beta",
-            b.norm2.gamma:          p+"output/LayerNorm/gamma",
-            b.norm2.beta:           p+"output/LayerNorm/beta",
+            b.norm1.weight:         p+"attention/output/LayerNorm/gamma",
+            b.norm1.bias:           p+"attention/output/LayerNorm/beta",
+            b.norm2.weight:         p+"output/LayerNorm/gamma",
+            b.norm2.bias:           p+"output/LayerNorm/beta",
         })
 

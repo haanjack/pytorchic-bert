@@ -1,5 +1,6 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
 # (Strongly inspired by original Google BERT code and Hugging Face's code)
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Transformer Model Classes & Config Class """
 
@@ -40,17 +41,37 @@ def gelu(x):
 
 class LayerNorm(nn.Module):
     "A layernorm module in the TF style (epsilon inside the square root)."
-    def __init__(self, cfg, variance_epsilon=1e-12):
+    def __init__(self, cfg, eps=1e-12):
         super().__init__()
         self.gamma = nn.Parameter(torch.ones(cfg.dim))
         self.beta  = nn.Parameter(torch.zeros(cfg.dim))
-        self.variance_epsilon = variance_epsilon
+        self.eps = eps
 
     def forward(self, x):
         u = x.mean(-1, keepdim=True)
         s = (x - u).pow(2).mean(-1, keepdim=True)
-        x = (x - u) / torch.sqrt(s + self.variance_epsilon)
+        x = (x - u) / torch.sqrt(s + self.eps)
         return self.gamma * x + self.beta
+
+
+try:
+    from apex.normalization.fused_layer_norm import FusedLayerNorm as BertLayerNorm
+except ImportError:
+    print("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex.")
+    class BertLayerNorm(nn.Module):
+        def __init__(self, hidden_size, eps=1e-12):
+            """Construct a layernorm module in the TF style (epsilon inside the square root).
+            """
+            super(BertLayerNorm, self).__init__()
+            self.weight = nn.Parameter(torch.ones(hidden_size)) # gamma -> weight
+            self.bias = nn.Parameter(torch.zeros(hidden_size)) # beta -> bias
+            self.variance_epsilon = eps
+
+        def forward(self, x):
+            u = x.mean(-1, keepdim=True)
+            s = (x - u).pow(2).mean(-1, keepdim=True)
+            x = (x - u) / torch.sqrt(s + self.variance_epsilon)
+            return self.weight * x + self.bias
 
 
 class Embeddings(nn.Module):
@@ -61,7 +82,8 @@ class Embeddings(nn.Module):
         self.pos_embed = nn.Embedding(cfg.max_len, cfg.dim) # position embedding
         self.seg_embed = nn.Embedding(cfg.n_segments, cfg.dim) # segment(token type) embedding
 
-        self.norm = LayerNorm(cfg)
+        # self.norm = LayerNorm(cfg)
+        self.norm = BertLayerNorm(cfg.dim, eps=1e-12)
         self.drop = nn.Dropout(cfg.p_drop_hidden)
 
     def forward(self, x, seg):
@@ -97,7 +119,7 @@ class MultiHeadedSelfAttention(nn.Module):
         # (B, H, S, W) @ (B, H, W, S) -> (B, H, S, S) -softmax-> (B, H, S, S)
         scores = q @ k.transpose(-2, -1) / np.sqrt(k.size(-1))
         if mask is not None:
-            mask = mask[:, None, None, :].float()
+            mask = mask[:, None, None, :].to(dtype=x.dtype) # fp16 compatibility
             scores -= 10000.0 * (1.0 - mask)
         scores = self.drop(F.softmax(scores, dim=-1))
         # (B, H, S, S) @ (B, H, S, W) -> (B, H, S, W) -trans-> (B, S, H, W)
@@ -127,9 +149,9 @@ class Block(nn.Module):
         super().__init__()
         self.attn = MultiHeadedSelfAttention(cfg)
         self.proj = nn.Linear(cfg.dim, cfg.dim)
-        self.norm1 = LayerNorm(cfg)
+        self.norm1 = BertLayerNorm(cfg.dim, eps=1e-12)
         self.pwff = PositionWiseFeedForward(cfg)
-        self.norm2 = LayerNorm(cfg)
+        self.norm2 = BertLayerNorm(cfg.dim, eps=1e-12)
         self.drop = nn.Dropout(cfg.p_drop_hidden)
 
     def forward(self, x, mask):

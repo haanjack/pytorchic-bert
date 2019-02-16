@@ -1,4 +1,5 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Utils Functions """
 

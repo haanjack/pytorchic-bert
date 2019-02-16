@@ -1,5 +1,6 @@
 # Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team,
 # and Dong-Hyun Lee, Kakao Brain.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ a slightly modified version of Hugging Face's BERTAdam class """
 
@@ -40,11 +41,11 @@ class BertAdam(Optimizer):
         b1: Adams b1. Default: 0.9
         b2: Adams b2. Default: 0.999
         e: Adams epsilon. Default: 1e-6
-        weight_decay_rate: Weight decay. Default: 0.01
+        weight_decay: Weight decay. Default: 0.01
         max_grad_norm: Maximum norm for the gradients (-1 means no clipping). Default: 1.0
     """
     def __init__(self, params, lr, warmup=-1, t_total=-1, schedule='warmup_linear',
-                 b1=0.9, b2=0.999, e=1e-6, weight_decay_rate=0.01,
+                 b1=0.9, b2=0.999, e=1e-6, weight_decay=0.01,
                  max_grad_norm=1.0):
         assert lr > 0.0, "Learning rate: %f - should be > 0.0" % (lr)
         assert schedule in SCHEDULES, "Invalid schedule : %s" % (schedule)
@@ -54,7 +55,7 @@ class BertAdam(Optimizer):
         assert 0.0 <= b2 < 1.0, "b2: %f - should be in 0.0 ~ 1.0" % (b2)
         assert e > 0.0, "epsilon: %f - should be > 0.0" % (e)
         defaults = dict(lr=lr, schedule=schedule, warmup=warmup, t_total=t_total,
-                        b1=b1, b2=b2, e=e, weight_decay_rate=weight_decay_rate,
+                        b1=b1, b2=b2, e=e, weight_decay=weight_decay,
                         max_grad_norm=max_grad_norm)
         super(BertAdam, self).__init__(params, defaults)
 
@@ -123,8 +124,8 @@ class BertAdam(Optimizer):
                 # Instead we want to decay the weights in a manner that doesn't interact
                 # with the m/v parameters. This is equivalent to adding the square
                 # of the weights to the loss with plain (non-momentum) SGD.
-                if group['weight_decay_rate'] > 0.0:
-                    update += group['weight_decay_rate'] * p.data
+                if group['weight_decay'] > 0.0:
+                    update += group['weight_decay'] * p.data
 
                 if group['t_total'] != -1:
                     schedule_fct = SCHEDULES[group['schedule']]
@@ -146,14 +147,41 @@ class BertAdam(Optimizer):
 
 
 
-def optim4GPU(cfg, model):
+def optim4GPU(cfg, model, fp16):
     """ optimizer for GPU training """
+    # param_optimizer = list(model.named_parameters())
+    # no_decay = ['bias', 'gamma', 'beta']
+    # optimizer_grouped_parameters = [
+    #     {'params': [p for n, p in param_optimizer if n not in no_decay], 'weight_decay_rate': 0.01},
+    #     {'params': [p for n, p in param_optimizer if n in no_decay], 'weight_decay_rate': 0.0}]
+
+    # Prepare optimizer
     param_optimizer = list(model.named_parameters())
-    no_decay = ['bias', 'gamma', 'beta']
+    no_decay = ['bias', 'norm.bias', 'norm.weight', 'norm1.bias', 'norm1.weight', 'norm2.bias', 'norm2.weight']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in param_optimizer if n not in no_decay], 'weight_decay_rate': 0.01},
-        {'params': [p for n, p in param_optimizer if n in no_decay], 'weight_decay_rate': 0.0}]
-    return BertAdam(optimizer_grouped_parameters,
-                    lr=cfg.lr,
-                    warmup=cfg.warmup,
-                    t_total=cfg.total_steps)
+        {'params': [p for n, p in param_optimizer if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+
+    if fp16:
+        try:
+            from apex.optimizers import FP16_Optimizer
+            from apex.optimizers import FusedAdam
+        except ImportError:
+            raise ImportError(
+                "Please install apex from https://www.github.com/nvidia/apex to run this.")
+        optimizer = FusedAdam(optimizer_grouped_parameters,
+                              lr=cfg.lr,
+                              bias_correction=False,
+                              max_grad_norm=1.0)
+        if cfg.loss_scale == 0:
+            optimizer = FP16_Optimizer(optimizer, dynamic_loss_scale=True)
+        else:
+            optimizer = FP16_Optimizer(optimizer, static_loss_scale=cfg.loss_scale)
+    else:
+        optimizer = BertAdam(optimizer_grouped_parameters,
+                             lr=cfg.lr,
+                             warmup=cfg.warmup,
+                             t_total=cfg.total_steps)
+
+    return optimizer
