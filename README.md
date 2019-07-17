@@ -2,7 +2,7 @@
 src="https://user-images.githubusercontent.com/32828768/49876264-ff2e4180-fdf0-11e8-9512-06ffe3ede9c5.png">](https://jalammar.github.io/illustrated-bert/)
 
 # Pytorchic BERT
-This is re-implementation of [Google BERT model](https://github.com/google-research/bert) [[paper](https://arxiv.org/abs/1810.04805)] in Pytorch. I'm strongly inspired by [Hugging Face's code](https://github.com/huggingface/pytorch-pretrained-BERT) and I referred a lot to their codes, but I tried to make my codes **more pythonic and pytorchic style**. Actually, the number of lines is less than a half of HF's. 
+This is re-implementation of [Google BERT model](https://github.com/google-research/bert) [[paper](https://arxiv.org/abs/1810.04805)] in Pytorch. I was strongly inspired by [Hugging Face's code](https://github.com/huggingface/pytorch-pretrained-BERT) and I referred a lot to their codes, but I tried to make my codes **more pythonic and pytorchic style**. Actually, the number of lines is less than a half of HF's. 
 
 (It is still not so heavily tested - let me know when you find some bugs.)
 
@@ -30,6 +30,8 @@ Download pretrained model [BERT-Base, Uncased](https://storage.googleapis.com/be
 [GLUE Benchmark Datasets]( https://github.com/nyu-mll/GLUE-baselines) 
 before fine-tuning.
 * make sure that "total_steps" in train_mrpc.json is n_epochs*(num_data/batch_size)
+
+#### FP32
 ```
 export GLUE_DIR=/path/to/glue
 export BERT_PRETRAIN=/path/to/pretrain
@@ -48,13 +50,37 @@ python classify.py \
 ```
 Output :
 ```
-cuda (8 GPUs)
-Iter (loss=0.308): 100%|██████████████████████████████████████████████| 115/115 [01:19<00:00,  2.07it/s]
-Epoch 1/3 : Average Loss 0.547
-Iter (loss=0.303): 100%|██████████████████████████████████████████████| 115/115 [00:50<00:00,  2.30it/s]
-Epoch 2/3 : Average Loss 0.248
-Iter (loss=0.044): 100%|██████████████████████████████████████████████| 115/115 [00:50<00:00,  2.33it/s]
-Epoch 3/3 : Average Loss 0.068
+cuda (4 GPUs)
+Iter (loss=0.285): 100%|███████████████████████████████████████████| 115/115 [00:52<00:00,  2.74it/s]
+Epoch 1/3 : Average Loss 0.538
+Iter (loss=0.185): 100%|███████████████████████████████████████████| 115/115 [00:43<00:00,  2.68it/s]
+Epoch 2/3 : Average Loss 0.233
+Iter (loss=0.029): 100%|███████████████████████████████████████████| 115/115 [00:43<00:00,  2.74it/s]
+Epoch 3/3 : Average Loss 0.080
+```
+
+#### Mixed Precision
+python classify.py \
+    --task mrpc \
+    --mode train \
+    --train_cfg config/train_mrpc.json \
+    --model_cfg config/bert_base.json \
+    --data_file $GLUE_DIR/MRPC/train.tsv \
+    --pretrain_file $BERT_PRETRAIN/bert_model.ckpt \
+    --vocab $BERT_PRETRAIN/vocab.txt \
+    --save_dir $SAVE_DIR \
+    --max_len 128
+    --fp16
+```
+Output :
+```
+cuda (4 GPUs)
+Iter (loss=0.355): 100%|███████████████████████████████████████████| 115/115 [00:34<00:00,  4.10it/s]
+Epoch 1/3 : Average Loss 0.576
+Iter (loss=0.293): 100%|███████████████████████████████████████████| 115/115 [00:24<00:00,  4.82it/s]
+Epoch 2/3 : Average Loss 0.291
+Iter (loss=0.023): 100%|███████████████████████████████████████████| 115/115 [00:24<00:00,  4.81it/s]
+Epoch 3/3 : Average Loss 0.086
 ```
 
 ### Evaluation of the trained Classifier

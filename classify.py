@@ -229,7 +229,6 @@ def main(task='mrpc',
     dataloader = get_dataloader(dataset, local_rank=local_rank, train_batch_size=cfg.batch_size)
 
     # Setting multiple GPU setting
-    print("local rank:", local_rank)
     if local_rank == -1:
         device = get_device()
         num_gpu = torch.cuda.device_count()
