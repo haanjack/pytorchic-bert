@@ -1,4 +1,5 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Training Config & Helper Classes  """
 
@@ -11,6 +12,12 @@ import torch
 import torch.nn as nn
 
 import checkpoint
+try:
+    from apex import amp
+    from apex.parallel import DistributedDataParallel as DDP
+except ImportError:
+    raise ImportError(
+        "Please install apex from https://www.github.com/nvidia/apex to run this.")
 
 
 class Config(NamedTuple):
@@ -32,32 +39,41 @@ class Config(NamedTuple):
 
 class Trainer(object):
     """Training Helper Class"""
-    def __init__(self, cfg, model, data_iter, optimizer, save_dir, device):
+    def __init__(self, cfg, model, dataloader, optimizer, save_dir, device):
         self.cfg = cfg # config for training : see class Config
         self.model = model
-        self.data_iter = data_iter # iterator to load data
+        self.dataloader = dataloader # iterator to load data
         self.optimizer = optimizer
         self.save_dir = save_dir
         self.device = device # device name
 
-    def train(self, get_loss, model_file=None, pretrain_file=None, data_parallel=True):
+    def train(self, get_loss, model_file=None, pretrain_file=None, num_gpu=True, local_rank=-1, fp16=False):
         """ Train Loop """
         self.model.train() # train mode
         self.load(model_file, pretrain_file)
+
         model = self.model.to(self.device)
-        if data_parallel: # use Data Parallelism with Multi-GPU
+        if fp16:
+            self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O2") # amp
+        if local_rank != -1: # use Data Parallelism with Multi-GPU
+            model = DDP(model)
+        elif num_gpu > 1:
             model = nn.DataParallel(model)
 
         global_step = 0 # global iteration steps regardless of epochs
         for e in range(self.cfg.n_epochs):
             loss_sum = 0. # the sum of iteration losses to get average loss in every epoch
-            iter_bar = tqdm(self.data_iter, desc='Iter (loss=X.XXX)')
+            iter_bar = tqdm(self.dataloader, desc='Iter (loss=X.XXX)')
             for i, batch in enumerate(iter_bar):
                 batch = [t.to(self.device) for t in batch]
 
                 self.optimizer.zero_grad()
                 loss = get_loss(model, batch, global_step).mean() # mean() for Data Parallelism
-                loss.backward()
+                if fp16:
+                    with amp.scale_loss(loss, self.optimizer) as scaled_loss: # amp: automatic loss scaling
+                        scaled_loss.backward()
+                else:
+                    loss.backward()
                 self.optimizer.step()
 
                 global_step += 1
@@ -85,7 +101,7 @@ class Trainer(object):
             model = nn.DataParallel(model)
 
         results = [] # prediction results
-        iter_bar = tqdm(self.data_iter, desc='Iter (loss=X.XXX)')
+        iter_bar = tqdm(self.dataloader, desc='Iter (loss=X.XXX)')
         for batch in iter_bar:
             batch = [t.to(self.device) for t in batch]
             with torch.no_grad(): # evaluation without gradient calculation

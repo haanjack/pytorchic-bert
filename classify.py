@@ -1,5 +1,6 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
 # (Strongly inspired by original Google BERT code and Hugging Face's code)
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Fine-tuning on A Classification Task with pretrained Transformer """
 
@@ -9,7 +10,8 @@ import fire
 
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, RandomSampler, TensorDataset
+from torch.utils.data.distributed import DistributedSampler
 
 import tokenization
 import models
@@ -17,6 +19,11 @@ import optim
 import train
 
 from utils import set_seeds, get_device, truncate_tokens_pair
+
+try:
+    from apex.parallel import DistributedDataParallel as DDP
+except ImportError:
+    raise ImportError("Please install apex from https://www.github.com/nvidia/apex to run this example.")
 
 class CsvDataset(Dataset):
     """ Dataset Class for CSV file """
@@ -169,6 +176,15 @@ class Classifier(nn.Module):
 #pretrain_file='../uncased_L-12_H-768_A-12/bert_model.ckpt',
 #pretrain_file='../exp/bert/pretrain_100k/model_epoch_3_steps_9732.pt',
 
+def get_dataloader(train_data, local_rank, train_batch_size):
+    if local_rank == -1:
+        train_sampler = RandomSampler(train_data)
+    else:
+        train_sampler = DistributedSampler(train_data)
+    dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=train_batch_size)
+
+    return dataloader
+
 def main(task='mrpc',
          train_cfg='config/train_mrpc.json',
          model_cfg='config/bert_base.json',
@@ -179,7 +195,9 @@ def main(task='mrpc',
          vocab='../uncased_L-12_H-768_A-12/vocab.txt',
          save_dir='../exp/bert/mrpc',
          max_len=128,
-         mode='train'):
+         mode='train',
+         fp16=False,
+         local_rank=-1):
 
     cfg = train.Config.from_json(train_cfg)
     model_cfg = models.Config.from_json(model_cfg)
@@ -193,14 +211,27 @@ def main(task='mrpc',
                 TokenIndexing(tokenizer.convert_tokens_to_ids,
                               TaskDataset.labels, max_len)]
     dataset = TaskDataset(data_file, pipeline)
-    data_iter = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
+
+    # Setting multiple GPU setting
+    if local_rank == -1:
+        device = get_device()
+        num_gpu = torch.cuda.device_count()
+    else:
+        torch.cuda.set_device(local_rank)
+        device = torch.device("cuda", local_rank)
+        num_gpu = 1
+        # Initialize the distributed bakend which will take care of synchronizing nodes/GPUs
+        torch.distributed.init_process_group(backend='nccl', init_method='env://')
+
+    # data_iter = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
+    dataloader = get_dataloader(dataset, local_rank=local_rank, train_batch_size=cfg.batch_size)
 
     model = Classifier(model_cfg, len(TaskDataset.labels))
     criterion = nn.CrossEntropyLoss()
 
     trainer = train.Trainer(cfg,
                             model,
-                            data_iter,
+                            dataloader,
                             optim.optim4GPU(cfg, model),
                             save_dir, get_device())
 
@@ -211,7 +242,7 @@ def main(task='mrpc',
             loss = criterion(logits, label_id)
             return loss
 
-        trainer.train(get_loss, model_file, pretrain_file, data_parallel)
+        trainer.train(get_loss, model_file, pretrain_file, data_parallel, local_rank, fp16)
 
     elif mode == 'eval':
         def evaluate(model, batch):

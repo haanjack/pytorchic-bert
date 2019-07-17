@@ -1,5 +1,6 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
 # (Strongly inspired by original Google BERT code and Hugging Face's code)
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Pretrain transformer with Masked LM and Sentence Classification """
 
@@ -130,7 +131,7 @@ class Preprocess4Pretrain(Pipeline):
         n_pred = min(self.max_pred, max(1, int(round(len(tokens)*self.mask_prob))))
         # candidate positions of masked tokens
         cand_pos = [i for i, token in enumerate(tokens)
-                    if tokens != '[CLS]' and tokens != '[SEP]']
+                    if token != '[CLS]' and token != '[SEP]']
         shuffle(cand_pos)
         for pos in cand_pos[:n_pred]:
             masked_tokens.append(tokens[pos])

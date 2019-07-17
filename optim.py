@@ -1,5 +1,6 @@
 # Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team,
 # and Dong-Hyun Lee, Kakao Brain.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ a slightly modified version of Hugging Face's BERTAdam class """
 
@@ -157,3 +158,4 @@ def optim4GPU(cfg, model):
                     lr=cfg.lr,
                     warmup=cfg.warmup,
                     t_total=cfg.total_steps)
+                    

@@ -1,4 +1,5 @@
 # Copyright 2018 The Google AI Language Team Authors and The HugginFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Tokenization classes (It's exactly the same code as Google BERT code """
 

@@ -1,5 +1,6 @@
 # Copyright 2018 Dong-Hyun Lee, Kakao Brain.
 # (Strongly inspired by original Google BERT code and Hugging Face's code)
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 
 """ Transformer Model Classes & Config Class """
 
