@@ -54,8 +54,10 @@ class Trainer(object):
 
         model = self.model.to(self.device)
         if fp16:
-            self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O2") # amp
+            print("fp16")
+            self.model, self.optimizer = amp.initialize(self.model, self.optimizer, opt_level="O1") # amp
         if local_rank != -1: # use Data Parallelism with Multi-GPU
+            print("DDP" )
             model = DDP(model)
         elif num_gpu > 1:
             model = nn.DataParallel(model)

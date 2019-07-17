@@ -30,6 +30,8 @@ Download pretrained model [BERT-Base, Uncased](https://storage.googleapis.com/be
 [GLUE Benchmark Datasets]( https://github.com/nyu-mll/GLUE-baselines) 
 before fine-tuning.
 * make sure that "total_steps" in train_mrpc.json is n_epochs*(num_data/batch_size)
+
+#### FP32
 ```
 export GLUE_DIR=/path/to/glue
 export BERT_PRETRAIN=/path/to/pretrain
@@ -49,12 +51,60 @@ python classify.py \
 Output :
 ```
 cuda (8 GPUs)
-Iter (loss=0.308): 100%|██████████████████████████████████████████████| 115/115 [01:19<00:00,  2.07it/s]
-Epoch 1/3 : Average Loss 0.547
-Iter (loss=0.303): 100%|██████████████████████████████████████████████| 115/115 [00:50<00:00,  2.30it/s]
-Epoch 2/3 : Average Loss 0.248
-Iter (loss=0.044): 100%|██████████████████████████████████████████████| 115/115 [00:50<00:00,  2.33it/s]
-Epoch 3/3 : Average Loss 0.068
+Iter (loss=0.402): 100%|███████████████████████████████████████████| 115/115 [00:40<00:00,  3.23it/s]
+Epoch 1/3 : Average Loss 0.551
+Iter (loss=0.220): 100%|███████████████████████████████████████████| 115/115 [00:39<00:00,  3.23it/s]
+Epoch 2/3 : Average Loss 0.251
+Iter (loss=0.046): 100%|███████████████████████████████████████████| 115/115 [00:39<00:00,  3.22it/s]
+Epoch 3/3 : Average Loss 0.069
+```
+#### Automatic Mixed Precision
+```
+export GLUE_DIR=/path/to/glue
+export BERT_PRETRAIN=/path/to/pretrain
+export SAVE_DIR=/path/to/save
+
+python classify.py \
+    --task mrpc \
+    --mode train \
+    --train_cfg config/train_mrpc.json \
+    --model_cfg config/bert_base.json \
+    --data_file $GLUE_DIR/MRPC/train.tsv \
+    --pretrain_file $BERT_PRETRAIN/bert_model.ckpt \
+    --vocab $BERT_PRETRAIN/vocab.txt \
+    --save_dir $SAVE_DIR \
+    --max_len 128 \
+    --fp16
+```
+Output :
+```
+fp16
+Selected optimization level O1:  Insert automatic casts around Pytorch functions and Tensor methods.
+
+Defaults for this optimization level are:
+enabled                : True
+opt_level              : O1
+cast_model_type        : None
+patch_torch_functions  : True
+keep_batchnorm_fp32    : None
+master_weights         : None
+loss_scale             : dynamic
+Processing user overrides (additional kwargs that are not None)...
+After processing overrides, optimization options are:
+enabled                : True
+opt_level              : O1
+cast_model_type        : None
+patch_torch_functions  : True
+keep_batchnorm_fp32    : None
+master_weights         : None
+loss_scale             : dynamic
+Iter (loss=0.446):  51%|████████████████████████████████▎                              | 59/115 [00:11<00:10,  5.11it/s]Gradient overflow.  Skipping step, loss scaler 0 reducing loss scale to 32768.0
+Iter (loss=0.326): 100%|██████████████████████████████████████████████████████████████| 115/115 [00:24<00:00,  5.18it/s]
+Epoch 1/3 : Average Loss 0.558
+Iter (loss=0.276): 100%|██████████████████████████████████████████████████████████████| 115/115 [00:23<00:00,  5.00it/s]
+Epoch 2/3 : Average Loss 0.262
+Iter (loss=0.040): 100%|██████████████████████████████████████████████████████████████| 115/115 [00:23<00:00,  5.26it/s]
+Epoch 3/3 : Average Loss 0.082
 ```
 
 ### Evaluation of the trained Classifier
