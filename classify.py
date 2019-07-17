@@ -222,10 +222,14 @@ def main(task='mrpc',
                 TokenIndexing(tokenizer.convert_tokens_to_ids,
                               TaskDataset.labels, max_len)]
     dataset = TaskDataset(data_file, pipeline)
+
+    
+
     #  data_iter = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
     dataloader = get_dataloader(dataset, local_rank=local_rank, train_batch_size=cfg.batch_size)
 
     # Setting multiple GPU setting
+    print("local rank:", local_rank)
     if local_rank == -1:
         device = get_device()
         num_gpu = torch.cuda.device_count()
