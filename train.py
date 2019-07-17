@@ -58,11 +58,6 @@ class Trainer(object):
             self.model = self.model.half()
         model = self.model.to(self.device)
         if local_rank != -1: # use Distributed Data Parallelism for multi-node training
-            try:
-                from apex.parallel import DistributedDataParallel as DDP
-            except ImportError:
-                raise ImportError(
-                    "Please install apex from https://www.github.com/nvidia/apex to run this.")
             model = DDP(model)
         elif num_gpu > 1: # use Data Parallelism with Multi-GPU
             model = nn.DataParallel(model)
